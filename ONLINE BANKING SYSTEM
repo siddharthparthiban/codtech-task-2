@@ -1,0 +1,208 @@
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+
+
+class BankAccount implements Serializable {
+    private static int nextAccountNumber = 1000;
+    private int accountNumber;
+    private String owner;
+    private double balance;
+    private List<String> transactionHistory;
+
+    public BankAccount(String owner) {
+        this.accountNumber = nextAccountNumber++;
+        this.owner = owner;
+        this.balance = 0.0;
+        this.transactionHistory = new ArrayList<>();
+        addTransaction("Account created with initial balance 0.0");
+    }
+
+    public int getAccountNumber() { return accountNumber; }
+    public String getOwner() { return owner; }
+    public double getBalance() { return balance; }
+    public List<String> getTransactionHistory() { return transactionHistory; }
+
+    public void deposit(double amount) {
+        if (amount > 0) {
+            balance += amount;
+            addTransaction("Deposited: " + amount);
+        }
+    }
+
+    public void withdraw(double amount) {
+        if (amount > 0 && amount <= balance) {
+            balance -= amount;
+            addTransaction("Withdrew: " + amount);
+        }
+    }
+
+    public void transfer(BankAccount toAccount, double amount) {
+        if (amount > 0 && amount <= balance) {
+            this.withdraw(amount);
+            toAccount.deposit(amount);
+            addTransaction("Transferred: " + amount + " to account " + toAccount.getAccountNumber());
+            toAccount.addTransaction("Received: " + amount + " from account " + this.getAccountNumber());
+        }
+    }
+
+    private void addTransaction(String transaction) { transactionHistory.add(transaction); }
+}
+
+
+class User implements Serializable {
+    private String username;
+    private String password;
+    private BankAccount account;
+
+    public User(String username, String password, String name) {
+        this.username = username;
+        this.password = password;
+        this.account = new BankAccount(name);
+    }
+
+    public String getUsername() { return username; }
+    public String getPassword() { return password; }
+    public BankAccount getAccount() { return account; }
+}
+
+
+class BankingSystem {
+    private List<User> users = new ArrayList<>();
+
+    public void addUser(User user) { users.add(user); }
+
+    public User authenticate(String username, String password) {
+        return users.stream().filter(user -> user.getUsername().equals(username) && user.getPassword().equals(password)).findFirst().orElse(null);
+    }
+
+    public User findUserByUsername(String username) {
+        return users.stream().filter(user -> user.getUsername().equals(username)).findFirst().orElse(null);
+    }
+
+    public List<User> getUsers() { return users; }
+}
+
+
+class FileHandler {
+    public static void saveUsersToFile(List<User> users, String fileName) throws IOException {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(fileName))) {
+            out.writeObject(users);
+        }
+    }
+
+    public static List<User> loadUsersFromFile(String fileName) throws IOException, ClassNotFoundException {
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(fileName))) {
+            return (List<User>) in.readObject();
+        }
+    }
+}
+
+
+public class Main {
+    public static void main(String[] args) {
+        BankingSystem bankingSystem = new BankingSystem();
+        Scanner scanner = new Scanner(System.in);
+
+        try {
+            List<User> users = FileHandler.loadUsersFromFile("users.dat");
+            for (User user : users) {
+                bankingSystem.addUser(user);
+            }
+        } catch (Exception e) {
+            System.out.println("No previous data found. Starting fresh.");
+        }
+
+        while (true) {
+            System.out.println("1. Create Account\n2. Login\n3. Exit");
+            int choice = scanner.nextInt();
+            scanner.nextLine(); 
+
+            switch (choice) {
+                case 1:
+                    System.out.println("Enter username:");
+                    String username = scanner.nextLine();
+                    System.out.println("Enter password:");
+                    String password = scanner.nextLine();
+                    System.out.println("Enter name:");
+                    String name = scanner.nextLine();
+
+                    bankingSystem.addUser(new User(username, password, name));
+                    System.out.println("Account created successfully.");
+                    break;
+                case 2:
+                    System.out.println("Enter username:");
+                    String loginUsername = scanner.nextLine();
+                    System.out.println("Enter password:");
+                    String loginPassword = scanner.nextLine();
+
+                    User user = bankingSystem.authenticate(loginUsername, loginPassword);
+                    if (user != null) {
+                        System.out.println("Login successful.");
+                        handleUserMenu(scanner, user, bankingSystem);
+                    } else {
+                        System.out.println("Invalid credentials.");
+                    }
+                    break;
+                case 3:
+                    try {
+                        FileHandler.saveUsersToFile(bankingSystem.getUsers(), "users.dat");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    System.exit(0);
+                    break;
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void handleUserMenu(Scanner scanner, User user, BankingSystem bankingSystem) {
+        while (true) {
+            System.out.println("1. View Balance\n2. Deposit\n3. Withdraw\n4. Transfer\n5. View Transaction History\n6. Logout");
+            int choice = scanner.nextInt();
+            scanner.nextLine(); 
+
+            switch (choice) {
+                case 1:
+                    System.out.println("Current balance: " + user.getAccount().getBalance());
+                    break;
+                case 2:
+                    System.out.println("Enter amount to deposit:");
+                    double depositAmount = scanner.nextDouble();
+                    user.getAccount().deposit(depositAmount);
+                    System.out.println("Deposit successful.");
+                    break;
+                case 3:
+                    System.out.println("Enter amount to withdraw:");
+                    double withdrawAmount = scanner.nextDouble();
+                    user.getAccount().withdraw(withdrawAmount);
+                    System.out.println("Withdrawal successful.");
+                    break;
+                case 4:
+                    System.out.println("Enter recipient username:");
+                    String recipientUsername = scanner.nextLine();
+                    System.out.println("Enter amount to transfer:");
+                    double transferAmount = scanner.nextDouble();
+
+                    User recipient = bankingSystem.findUserByUsername(recipientUsername);
+                    if (recipient != null) {
+                        user.getAccount().transfer(recipient.getAccount(), transferAmount);
+                        System.out.println("Transfer successful.");
+                    } else {
+                        System.out.println("Recipient not found.");
+                    }
+                    break;
+                case 5:
+                    user.getAccount().getTransactionHistory().forEach(System.out::println);
+                    break;
+                case 6:
+                    return;
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+}
